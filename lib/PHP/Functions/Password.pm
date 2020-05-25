@@ -50,11 +50,12 @@ use constant SIG_BCRYPT   => '2y';
 use constant SIG_ARGON2I  => 'argon2i';
 use constant SIG_ARGON2ID => 'argon2id';
 
-use constant RE_BCRYPT_SETTINGS => qr#^\$(2[abxy]?)\$([0-3]\d)\$([A-Za-z0-9+\\/\.]{22})#;	# intentionally unanchored at the end
-use constant RE_BCRYPT_STRING   => qr#^\$(2[abxy]?)\$([0-3]\d)\$([A-Za-z0-9+\\/\.]{22})(.+)$#;
+use constant RE_BCRYPT_SALT		=> qr#^[./A-Za-z0-9]{22}$#;	# fixed 16 byte salt
+use constant RE_BCRYPT_SETTINGS => qr#^\$(2[abxy]?)\$([0-3]\d)\$([./A-Za-z0-9]{22})#;	# intentionally unanchored at the end
+use constant RE_BCRYPT_STRING   => qr#^\$(2[abxy]?)\$([0-3]\d)\$([./A-Za-z0-9]{22})([./A-Za-z0-9]+)$#;
 
-# TODO: figure out encoding and make regex stricter. salt and hash parts are some sort of base64 encoded without trailing =;
-use constant RE_ARGON2_STRING   => qr#^\$(argon2id?)\$v=(\d{1,3})\$m=(\d{1,10}),t=(\d{1,3}),p=(\d{1,3})\$(.+?)\$(.+)$#;
+# See https://www.alexedwards.net/blog/how-to-hash-and-verify-passwords-with-argon2-in-go
+use constant RE_ARGON2_STRING   => qr#^\$(argon2id?)\$v=(\d{1,3})\$m=(\d{1,10}),t=(\d{1,3}),p=(\d{1,3})\$([A-Za-z0-9+/]+)\$([A-Za-z0-9+/]+)$#;
 
 my %sig_to_algo = (
 	&SIG_BCRYPT		=> PASSWORD_BCRYPT,
@@ -141,8 +142,8 @@ The same as L<http://php.net/manual/en/function.password-get-info.php>
 with the exception that it returns the following additional keys in the result:
 
 	algoSig	e.g. '2y'
-	salt
-	hash
+	salt (encoded)
+	hash (encoded)
 	version (only for argon2 algorithms)
 
 Returns a hash in array context, else a hashref.
@@ -179,6 +180,8 @@ sub password_get_info {
 		my $threads = int($5);
 		my $salt = $6;
 		my $hash = $7;
+		#my $raw_salt = decode_base64($salt);
+		#my $raw_hash = decode_base64($hash);
 		my %result = (
 			'algo'		=> $sig_to_algo{$sig},
 			'algoName'	=> $sig,
@@ -212,10 +215,10 @@ sub password_get_info {
 Similar to L<http://php.net/manual/en/function.password-hash.php>
 with difference that the $algo argument is optional and defaults to PASSWORD_DEFAULT for your programming pleasure.
 
-Important notes:
+Important notes about the 'salt' option which you shouldn't use:
 
-	- The PASSWORD_BCRYPT 'salt' option is deprecated since PHP 7.0.0 but if you do pass it, then it must be the sort-of-base64 encoded salt and not raw bytes!
-	- Do not use the 'salt' option for other algorithms than PASSWORD_BCRYPT because the behaviour is not yet definite.
+	- The PASSWORD_BCRYPT 'salt' option is deprecated since PHP 7.0.0, but if you do pass it, then it must be bcrypt custom base64 encoded and not raw bytes!
+	- For algorithms other than PASSWORD_BCRYPT, PHP doesn't support the 'salt' option, but if you do pass it, then it must be in raw bytes!
 
 =cut
 
@@ -225,7 +228,16 @@ sub password_hash {
 	my $algo = shift // PASSWORD_DEFAULT;
 	my %options = @_ && ref($_[0]) ? %{$_[0]} : @_;
 	if ($algo == PASSWORD_BCRYPT) {
-		my $salt = $options{'salt'} || $proto->_en_base64(Crypt::OpenSSL::Random::random_bytes(16));	# deprecated since PHP 7.0.0; encoded!
+		my $salt;
+		if (defined($options{'salt'}) && length($options{'salt'})) {	# bcrypt custom base64 encoded!
+			unless ($options{'salt'} =~ RE_BCRYPT_SALT) {
+				croak('Bad syntax in given and deprecated salt option (' . $options{'salt'} . ')');
+			}
+			$salt = $options{'salt'};
+		}
+		else {
+			$salt = $proto->_bcrypt_base64_encode(Crypt::OpenSSL::Random::random_bytes(16));
+		}
 		my $cost = $options{'cost'} || PASSWORD_BCRYPT_DEFAULT_COST;
 		my $settings = '$' . SIG_BCRYPT . '$' . sprintf('%.2u', $cost) . '$' . $salt;
 		return $proto->_bcrypt($password, $settings);
@@ -303,7 +315,26 @@ sub password_needs_rehash {
 			$options{'debug'} && warn('threads mismatch: ' . $info{'options'}->{'threads'} . "<>$threads");
 			return 1;
 		}
-		# TODO: verify encoded salt and hash(tag) length
+		my $salt_encoded = $info{'salt'};
+		my $salt = decode_base64($salt_encoded);
+		if (!defined($salt)) {
+			$options{'debug'} && warn("decode_base64('$salt_encoded') failed");
+			return 1;
+		}
+		my $actual_salt_length = length($salt);
+		my $wanted_salt_length = defined($options{'salt'}) && length($options{'salt'}) ? length($options{'salt'}) : PASSWORD_ARGON2_DEFAULT_SALT_LENGTH;
+		if ($wanted_salt_length != $actual_salt_length) {
+			$options{'debug'} && warn("wanted salt length ($wanted_salt_length) != actual salt length ($actual_salt_length)");
+			return 1;
+		}
+		my $tag_encoded = $info{'hash'};
+		my $tag = decode_base64($tag_encoded);
+		my $actual_tag_length = length($tag);
+		my $wanted_tag_length = $options{'tag_length'} || PASSWORD_ARGON2_DEFAULT_TAG_LENGTH;	# undocumented; not a PHP option; 4 - 2^32 - 1
+		if ($wanted_tag_length != $actual_tag_length) {
+			$options{'debug'} && warn("wanted tag length ($wanted_tag_length) != actual tag length ($actual_tag_length)");
+			return 1;
+		}
 	}
 	else {
 		$options{'debug'} && warn("Can't do anything with unknown algorithm: $algo");
@@ -460,10 +491,10 @@ sub _bcrypt {
 		{
 			'key_nul'	=> length($type) > 1,
 			'cost'		=> $cost,
-			'salt'		=> $proto->_de_base64($salt_base64),
+			'salt'		=> $proto->_bcrypt_base64_decode($salt_base64),
 		}
 	);
-	return '$' . SIG_BCRYPT . '$' . $cost . '$' . $salt_base64 . $proto->_en_base64($hash);
+	return '$' . SIG_BCRYPT . '$' . $cost . '$' . $salt_base64 . $proto->_bcrypt_base64_encode($hash);
 }
 
 
@@ -500,7 +531,7 @@ sub _bcrypt_hash {
 
 # From Crypt::Eksblowfish::Bcrypt.
 # Decodes an octet string that was textually encoded using the form of base64 that is conventionally used with bcrypt.
-sub _de_base64 {
+sub _bcrypt_base64_decode {
 	my $proto = @_ && UNIVERSAL::isa($_[0],__PACKAGE__) ? shift : __PACKAGE__;
 	my $text = shift;
 	unless ($text =~ m!\A(?>(?:[./A-Za-z0-9]{4})*)(?:|[./A-Za-z0-9]{2}[.CGKOSWaeimquy26]|[./A-Za-z0-9][.Oeu])\z!) {
@@ -516,11 +547,11 @@ sub _de_base64 {
 
 # From Crypt::Eksblowfish::Bcrypt.
 # Encodes the octet string textually using the form of base64 that is conventionally used with bcrypt.
-sub _en_base64 {
+sub _bcrypt_base64_encode {
 	my $proto = @_ && UNIVERSAL::isa($_[0],__PACKAGE__) ? shift : __PACKAGE__;
 	my $octets = shift;
 	my $text = encode_base64($octets, '');
-	$text =~ tr#A-Za-z0-9+/=#./A-Za-z0-9#d;
+	$text =~ tr#A-Za-z0-9+/=#./A-Za-z0-9#d;	# "=" padding is deleted
 	return $text;
 }
 

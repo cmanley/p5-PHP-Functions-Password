@@ -67,7 +67,8 @@ if (!($ENV{'HARNESS_ACTIVE'} || ($^O eq 'MSWin32'))) {	# experimental: that's wh
 		my $phpversion = `php -v`;
 		$phpversion =~ s/^PHP (\S+)\s.*/$1/s;
 		if ($phpversion =~ /^(\d{1,3}\.\d{1,6})\b/) {
-			if ($1 < 5.5) {
+			#if ($1 < 5.5) {
+			if ($1 < 7) {
 				undef($php);
 			}
 		}
