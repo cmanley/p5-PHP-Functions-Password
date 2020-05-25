@@ -10,9 +10,7 @@ my %tests_verify_good = (
 	'Test 123'		=> '$2b$10$wOmSB/8mvcXJBAnPTJzO..tFOq4nCxP21vTfWqunrVi5Irsi3Obcy',
 	'€U maffia'		=> '$2y$04$f5VgvyHCr0OiPbvjdZ8zJuPBHD6Tul6nleZSWUVkk/HSOKOC8DmFy',	# UTF-8!
 );
-if (eval {
-	require Crypt::Argon2;
-}) {
+if ($INC{'Crypt/Argon2.pm'} || eval { require Crypt::Argon2; }) {
 	$tests_verify_good{'€uro 123'}   = '$argon2id$v=19$m=65536,t=4,p=1$d0pJRy83QmFtbjRoMTRMLg$LUUfxwFcaIeV/V/L6vs2ist/n41kUfuGEKKfoYFbOtY';	# UTF-8!
 	$tests_verify_good{'top secret'} = '$argon2i$v=19$m=65536,t=4,p=1$QVVILkUvbUFaNGQzOEpKTA$PuQa7RB6cJWHFRJXGxXqi0qW51N801ZS9ZE7f+gDnjI';
 }
@@ -36,7 +34,7 @@ if (!($ENV{'HARNESS_ACTIVE'} || ($^O eq 'MSWin32'))) {	# experimental: that's wh
 		$phpversion =~ s/^PHP (\S+)\s.*/$1/s;
 		if ($phpversion =~ /^(\d{1,3}\.\d{1,6})\b/) {
 			#if ($1 < 5.5) {
-			if ($1 < 7) {
+			if ($1 < 7.3) {
 				undef($php);
 			}
 		}

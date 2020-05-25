@@ -23,11 +23,9 @@ foreach my $method (@methods) {
 
 my @algos = password_algos();
 ok(@algos > 0, 'password_algos() returns an array of at least 1 element');
-
 ok((grep { $_ eq '2y' } @algos), 'Result of password_algos() contains at least "2y"');
 
-
 unless($ENV{'HARNESS_ACTIVE'}) {
-	require Data::Dumper; Data::Dumper->import('Dumper'); no warnings; local $Data::Dumper::Terse = 1;
-	diag('Result of password_algos: ' . Dumper(\@algos));
+	#require Data::Dumper; Data::Dumper->import('Dumper'); no warnings; local $Data::Dumper::Terse = 1;
+	diag('password_algos: ' . join(', ', @algos));
 }

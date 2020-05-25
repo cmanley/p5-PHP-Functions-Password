@@ -24,7 +24,7 @@ if (!($ENV{'HARNESS_ACTIVE'} || ($^O eq 'MSWin32'))) {	# experimental: that's wh
 		$phpversion =~ s/^PHP (\S+)\s.*/$1/s;
 		if ($phpversion =~ /^(\d{1,3}\.\d{1,6})\b/) {
 			#if ($1 < 5.5) {
-			if ($1 < 7) {
+			if ($1 < 7.3) {
 				undef($php);
 			}
 		}
@@ -53,7 +53,8 @@ foreach my $method (@methods) {
 my %sig_to_algo = (
 	'2y'       => $class->PASSWORD_BCRYPT,
 );
-if ($INC{'Crypt/Argon2.pm'}) {
+
+if ($INC{'Crypt/Argon2.pm'} || eval { require Crypt::Argon2; }) {
 	$sig_to_algo{'argon2i'}  = $class->PASSWORD_ARGON2I;
 	$sig_to_algo{'argon2id'} = $class->PASSWORD_ARGON2ID;
 }
