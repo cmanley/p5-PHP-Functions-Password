@@ -7,13 +7,6 @@ use Crypt::OpenSSL::Random ();
 use MIME::Base64 qw(encode_base64 decode_base64);
 use base qw(Exporter);
 
-# Try to load modules for optional algorithms.
-unless (eval {
-	require Crypt::Argon2;
-}) {
-	# nop
-}
-
 our @EXPORT;
 our @EXPORT_OK = qw(
 	password_algos
@@ -32,7 +25,7 @@ our %EXPORT_TAGS = (
 	'consts'	=> [ grep /^PASSWORD_/, @EXPORT_OK ],
 	'funcs'		=> [ grep /^password_/, @EXPORT_OK ],
 );
-our $VERSION = '1.08';
+our $VERSION = '1.09';
 
 use constant PASSWORD_BCRYPT   => 1;
 use constant PASSWORD_ARGON2I  => 2;
@@ -70,7 +63,7 @@ PHP::Functions::Password - Perl ports of PHP password functions
 =head1 DESCRIPTION
 
 This module provides ported PHP password functions.
-This module only supports the bcrypt algorithm, as is the case with the equivalent PHP functions at the date of writing this.
+This module supports the bcrypt, argon2i, and argon2id algorithms, as is the case with the equivalent PHP functions at the date of writing this.
 All functions may also be called as class methods and support inheritance too.
 See L<http://php.net/manual/en/ref.password.php> for detailed usage instructions.
 
@@ -78,17 +71,22 @@ See L<http://php.net/manual/en/ref.password.php> for detailed usage instructions
 
 	use PHP::Functions::Password ();
 
-Functional interface use:
+Functional interface, typical use:
 
 	use PHP::Functions::Password qw(password_hash);
 	my $password = 'secret';
-	my $crypted_string = password_hash($password);
+	my $crypted_string = password_hash($password);	# uses PASSWORD_BCRYPT algorithm
 
 Functional interface use, using options:
 
 	use PHP::Functions::Password qw(:all);
 	my $password = 'secret';
+
+	# Specify options (see PHP docs for which):
 	my $crypted_string = password_hash($password, PASSWORD_DEFAULT, cost => 11);
+
+	# Use a different algorithm:
+	my $crypted_string = password_hash($password, PASSWORD_ARGON2ID);
 
 Class method use, using options:
 
@@ -107,6 +105,8 @@ The following names can be imported into the calling namespace by request:
 	password_hash
 	password_needs_rehash
 	password_verify
+	PASSWORD_ARGON2I
+	PASSWORD_ARGON2ID
 	PASSWORD_BCRYPT
 	PASSWORD_DEFAULT
 	:all	- what it says
@@ -127,7 +127,7 @@ Returns an array of supported password algorithm signatures.
 
 sub password_algos {
 	my @result = (SIG_BCRYPT);
-	if (exists($INC{'Crypt/Argon2.pm'})) {
+	if ($INC{'Crypt/Argon2.pm'} || eval { require Crypt::Argon2; }) {
 		push(@result, SIG_ARGON2I, SIG_ARGON2ID);
 	}
 	return @result;
@@ -217,7 +217,7 @@ with difference that the $algo argument is optional and defaults to PASSWORD_DEF
 
 Important notes about the 'salt' option which you shouldn't use:
 
-	- The PASSWORD_BCRYPT 'salt' option is deprecated since PHP 7.0.0, but if you do pass it, then it must be bcrypt custom base64 encoded and not raw bytes!
+	- The PASSWORD_BCRYPT 'salt' option is deprecated since PHP 7.0, but if you do pass it, then it must be bcrypt custom base64 encoded and not raw bytes!
 	- For algorithms other than PASSWORD_BCRYPT, PHP doesn't support the 'salt' option, but if you do pass it, then it must be in raw bytes!
 
 =cut
@@ -243,9 +243,9 @@ sub password_hash {
 		return $proto->_bcrypt($password, $settings);
 	}
 	elsif (($algo == PASSWORD_ARGON2ID) || ($algo == PASSWORD_ARGON2I)) {
-		unless (exists($INC{'Crypt/Argon2.pm'})) {
+		unless ($INC{'Crypt/Argon2.pm'} || eval { require Crypt::Argon2; }) {
 			my $algo_const_name = $algo == PASSWORD_ARGON2ID ? PASSWORD_ARGON2ID : PASSWORD_ARGON2I;
-			croak("The $algo_const_name algorithm requires the module Crypt::Argon2 to be installed");
+			croak("Cannot use the $algo_const_name algorithm because the module Crypt::Argon2 is not installed");
 		}
 		my $salt = $options{'salt'} || Crypt::OpenSSL::Random::random_bytes(PASSWORD_ARGON2_DEFAULT_SALT_LENGTH);	# undocumented; not a PHP option; raw!
 		my $memory_cost = $options{'memory_cost'} || PASSWORD_ARGON2_DEFAULT_MEMORY_COST;
@@ -370,7 +370,7 @@ sub password_verify {
 		return ($new_crypt =~ RE_BCRYPT_STRING) && ($4 eq $hash);
 	}
 	elsif ($crypted =~ RE_ARGON2_STRING) {
-		unless (exists($INC{'Crypt/Argon2.pm'})) {
+		unless ($INC{'Crypt/Argon2.pm'} || eval { require Crypt::Argon2; }) {
 			#carp("Verifying the $sig algorithm requires the module Crypt::Argon2 to be installed");
 			return 0;
 		}
@@ -563,10 +563,10 @@ __END__
 
 =head1 SEE ALSO
 
-L<Crypt::Eksblowfish::Bcrypt> from which several internal functions were copied and slightly modified,
-L<Crypt::Eksblowfish> used for creating/verifying crypted strings in bcrypt format,
-L<Crypt::OpenSSL::Random> used for random salt generation,
-L<Crypt::Argon2>.
+ L<Crypt::Eksblowfish::Bcrypt> from which several internal functions were copied and slightly modified.
+ L<Crypt::Eksblowfish> used for creating/verifying crypted strings in bcrypt format.
+ L<Crypt::OpenSSL::Random> used for random salt generation.
+ L<Crypt::Argon2> recommended for argon2 algorithm support.
 
 =head1 COPYRIGHT
 
