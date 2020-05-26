@@ -25,7 +25,7 @@ our %EXPORT_TAGS = (
 	'consts'	=> [ grep /^PASSWORD_/, @EXPORT_OK ],
 	'funcs'		=> [ grep /^password_/, @EXPORT_OK ],
 );
-our $VERSION = '1.09';
+our $VERSION = '1.10';
 
 use constant PASSWORD_BCRYPT   => 1;
 use constant PASSWORD_ARGON2I  => 2;
@@ -428,7 +428,7 @@ sub get_info {
 =item hash($password, %options)
 
 Proxy method for C<password_hash($password, $algo, $options)>.
-The difference is that this method allows does have an $algo argument,
+The difference is that this method does have an $algo argument,
 but instead allows the algorithm to be specified with the 'algo' option (in %options).
 
 =cut
