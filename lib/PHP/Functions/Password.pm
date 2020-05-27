@@ -427,7 +427,7 @@ sub get_info {
 
 =item hash($password, %options)
 
-Proxy method for C<password_hash($password, $algo, $options)>.
+Proxy method for C<password_hash($password, $algo, %options)>.
 The difference is that this method does have an $algo argument,
 but instead allows the algorithm to be specified with the 'algo' option (in %options).
 
