@@ -12,7 +12,7 @@ WriteMakefile(
 	},
 	'PREREQ_PM' =>	{
 		'Crypt::Argon2'				=> 0.004,
-		'Crypt::Eksblowfish'		=> 0,
+		'Crypt::Bcrypt'				=> 0,
 		'Crypt::OpenSSL::Random'	=> 0,
 		'MIME::Base64'				=> 0,
 		'Readonly'					=> 2.0,
