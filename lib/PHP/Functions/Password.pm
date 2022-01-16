@@ -561,9 +561,9 @@ __END__
 
 =head1 SEE ALSO
 
+ L<Crypt::Argon2> recommended for argon2 algorithm support.
  L<Crypt::Bcrypt> used for all the bcrypt support.
  L<Crypt::OpenSSL::Random> used for random salt generation.
- L<Crypt::Argon2> recommended for argon2 algorithm support.
 
 =head1 COPYRIGHT
 
