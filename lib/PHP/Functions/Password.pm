@@ -123,7 +123,7 @@ Functional interface use, using options:
 	my $pepper = 'Abracadabra and Hocus pocus';  # retrieve this from a secrets config file for example (and don't loose it!)
 	my $peppered_password = hmac_sha256($password, $pepper);
 	my $crypted_string = password_hash($password, PASSWORD_ARGON2ID);  # store this in your database
-	# ... and when verifying passwords, then you pepper then first too.
+	# ... and when verifying passwords, then you pepper them first too.
 
 Class method use, using options:
 
