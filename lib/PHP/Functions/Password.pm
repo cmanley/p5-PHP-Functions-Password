@@ -540,7 +540,7 @@ sub needs_rehash {
 
 =item verify($password, $crypted)
 
-Alias of C<verify($password, $crypted)>.
+Alias of C<password_verify($password, $crypted)>.
 
 =cut
 
