@@ -26,7 +26,7 @@ our %EXPORT_TAGS = (
 	'consts'  => [ grep /^PASSWORD_/, @EXPORT_OK ],
 	'funcs'   => [ grep /^password_/, @EXPORT_OK ],
 );
-our $VERSION = '2.00';
+our $VERSION = '2.01';
 
 
 # Exported constants
@@ -325,37 +325,41 @@ sub _needs_rehash {
 	my $crypted = shift;
 	my $algo = shift(@_) // PASSWORD_DEFAULT;
 	my %options = @_ && ref($_[0]) ? %{$_[0]} : @_;
-	my %info = $proto->password_get_info($crypted);
-	unless ($info{'algo'} == $algo) {
-		$options{'debug'} && warn('Algorithms differ: ' . $info{'algo'} . "<>$algo");
+	my $info = $proto->_get_info($crypted);
+	unless ($info) {
+		$options{'debug'} && warn('Unrecognized format');
+		return 1;
+	}
+	unless ($info->{'algo'} == $algo) {
+		$options{'debug'} && warn('Algorithms differ: ' . $info->{'algo'} . "<>$algo");
 		return 1;
 	}
 	if ($algo == PASSWORD_BCRYPT) {
-		#unless (($info{'algoSig'} eq $SIG_BCRYPT) || ($info{'algoSig'} eq '2b')) {	# also accept 2b as a non-PHP equivalent of 2y
-		unless ($info{'algoSig'} eq $SIG_BCRYPT) {	# this emulates PHP's behaviour (it requires 2b to be rehashed as 2y).
-			$options{'debug'} && warn('Algorithm signatures differ: ' . $info{'algoSig'} . ' vs ' . $SIG_BCRYPT);
+		#unless (($info->{'algoSig'} eq $SIG_BCRYPT) || ($info->{'algoSig'} eq '2b')) {	# also accept 2b as a non-PHP equivalent of 2y
+		unless ($info->{'algoSig'} eq $SIG_BCRYPT) {	# this emulates PHP's behaviour (it requires 2b to be rehashed as 2y).
+			$options{'debug'} && warn('Algorithm signatures differ: ' . $info->{'algoSig'} . ' vs ' . $SIG_BCRYPT);
 			return 1;
 		}
 		my $cost = $options{'cost'} // $PASSWORD_BCRYPT_DEFAULT_COST;
-		unless (defined($info{'options'}->{'cost'}) && ($info{'options'}->{'cost'} == $cost)) {
-			$options{'debug'} && warn('Cost mismatch: ' . $info{'options'}->{'cost'} . "<>$cost");
+		unless (defined($info->{'options'}->{'cost'}) && ($info->{'options'}->{'cost'} == $cost)) {
+			$options{'debug'} && warn('Cost mismatch: ' . $info->{'options'}->{'cost'} . "<>$cost");
 			return 1;
 		}
 	}
 	elsif (($algo == PASSWORD_ARGON2ID) || ($algo == PASSWORD_ARGON2I)) {
 		my $memory_cost = $options{'memory_cost'} // $PASSWORD_ARGON2_DEFAULT_MEMORY_COST;
-		if ($info{'options'}->{'memory_cost'} != $memory_cost) {
-			$options{'debug'} && warn('memory_cost mismatch: ' . $info{'options'}->{'memory_cost'} . "<>$memory_cost");
+		if ($info->{'options'}->{'memory_cost'} != $memory_cost) {
+			$options{'debug'} && warn('memory_cost mismatch: ' . $info->{'options'}->{'memory_cost'} . "<>$memory_cost");
 			return 1;
 		}
 		my $time_cost = $options{'time_cost'} // $PASSWORD_ARGON2_DEFAULT_TIME_COST;
-		if ($info{'options'}->{'time_cost'} != $time_cost) {
-			$options{'debug'} && warn('time_cost mismatch: ' . $info{'options'}->{'time_cost'} . "<>$time_cost");
+		if ($info->{'options'}->{'time_cost'} != $time_cost) {
+			$options{'debug'} && warn('time_cost mismatch: ' . $info->{'options'}->{'time_cost'} . "<>$time_cost");
 			return 1;
 		}
 		my $threads = $options{'threads'} // $PASSWORD_ARGON2_DEFAULT_THREADS;
-		if ($info{'options'}->{'threads'} != $threads) {
-			$options{'debug'} && warn('threads mismatch: ' . $info{'options'}->{'threads'} . "<>$threads");
+		if ($info->{'options'}->{'threads'} != $threads) {
+			$options{'debug'} && warn('threads mismatch: ' . $info->{'options'}->{'threads'} . "<>$threads");
 			return 1;
 		}
 		my $wanted_salt_length = defined($options{'salt'}) && length($options{'salt'}) ? length($options{'salt'}) : $PASSWORD_ARGON2_DEFAULT_SALT_LENGTH;
@@ -363,14 +367,14 @@ sub _needs_rehash {
 
 		if ($INC{'Crypt/Argon2.pm'} || eval { require Crypt::Argon2; }) {
 			if (Crypt::Argon2->can('argon2_needs_rehash')) {	# since version 0.008
-				return Crypt::Argon2::argon2_needs_rehash($crypted, $info{'algoSig'}, $time_cost, $memory_cost . 'k', $threads, $wanted_tag_length, $wanted_salt_length);
+				return Crypt::Argon2::argon2_needs_rehash($crypted, $info->{'algoSig'}, $time_cost, $memory_cost . 'k', $threads, $wanted_tag_length, $wanted_salt_length);
 			}
 			else {	# as long as Crypt::Argon2 is not required for building, a minimum version requirement cannot be forced, and therefore the workaround below is needed
-				if ($info{'version'} < 19) {
-					$options{'debug'} && warn('Version mismatch: ' . $info{'version'} . '<19');
+				if ($info->{'version'} < 19) {
+					$options{'debug'} && warn('Version mismatch: ' . $info->{'version'} . '<19');
 					return 1;
 				}
-				my $salt_encoded = $info{'salt'};
+				my $salt_encoded = $info->{'salt'};
 				my $salt = decode_base64($salt_encoded);
 				if (!defined($salt)) {
 					$options{'debug'} && warn("decode_base64('$salt_encoded') failed");
@@ -381,7 +385,7 @@ sub _needs_rehash {
 					$options{'debug'} && warn("wanted salt length ($wanted_salt_length) != actual salt length ($actual_salt_length)");
 					return 1;
 				}
-				my $tag_encoded = $info{'hash'};
+				my $tag_encoded = $info->{'hash'};
 				my $tag = decode_base64($tag_encoded);
 				my $actual_tag_length = length($tag);
 				if ($wanted_tag_length != $actual_tag_length) {

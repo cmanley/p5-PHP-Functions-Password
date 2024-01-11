@@ -66,3 +66,5 @@ v2.00	2024-01-08
 	- Static method get_info() now returns either a hashref or undef if the argument format is unrecognized. Previously it was a hash or hashref depending on the context.
 	- Static method verify() now returns undef (previously 0) if the crypted string format is unrecognized.
 
+v2.01	2024-01-11
+	- Make _needs_rehash() call _get_info() instead of password_get_info()
